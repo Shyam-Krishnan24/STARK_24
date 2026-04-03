@@ -42,13 +42,32 @@ def rank_topics(chunks):
 
 def filter_topics(scored_topics):
     stop_topics = ["video", "lecture", "today", "thing", "stuff"]
-
+    
     final = []
 
     for topic, score in scored_topics:
         if topic not in stop_topics and len(topic) > 2:
             final.append({
                 "name": topic,
+                "importance": round(score, 2)
+            })
+
+    return final[:10]
+
+def filter_topics(scored_topics):
+    stop_words = [
+        "you", "this", "that", "anything", "something",
+        "thing", "stuff", "one", "your", "their"
+    ]
+
+    final = []
+
+    for topic, score in scored_topics:
+        topic_clean = topic.lower().strip()
+
+        if topic_clean not in stop_words and len(topic_clean) > 3:
+            final.append({
+                "name": topic_clean,
                 "importance": round(score, 2)
             })
 
