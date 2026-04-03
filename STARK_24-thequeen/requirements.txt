@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+groq
+pydantic
+youtube-transcript-api
+python-multipart
+sqlmodel
+mysql-connector-python
