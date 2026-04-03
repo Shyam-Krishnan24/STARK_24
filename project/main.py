@@ -28,28 +28,15 @@ def get_youtube_text(video_id):
     return text
 
 
-# 🔥 MAIN
+#  MAIN (ONLY YOUTUBE)
 if __name__ == "__main__":
 
-    print("Choose input type:")
-    print("1 → Sample Text")
-    print("2 → YouTube Video")
+    video_id = input("Enter YouTube Video ID: ")
 
-    choice = input("Enter choice (1 or 2): ")
-
-    if choice == "1":
-        text = """
-        Python loops are used to iterate over a sequence.
-        There are two types of loops: for loop and while loop.
-        A for loop is used when the number of iterations is known.
-        """
-
-    elif choice == "2":
-        video_id = input("Enter YouTube Video ID: ")
+    try:
         text = get_youtube_text(video_id)
-
-    else:
-        print("Invalid choice ❌")
+    except Exception as e:
+        print("❌ Error fetching transcript:", e)
         exit()
 
     topics = analyze_topics(text)
