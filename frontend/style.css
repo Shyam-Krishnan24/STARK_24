@@ -1,0 +1,13 @@
+body {
+  font-family: Arial;
+  background: #0f172a;
+  color: white;
+  padding: 20px;
+}
+
+#output {
+  background: #1e293b;
+  padding: 15px;
+  border-radius: 10px;
+  min-height: 100px;
+}

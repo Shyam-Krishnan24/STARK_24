@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Whisper Transcriber</title>
+  <style>
+    body {
+      width: 300px;
+      font-family: Arial;
+      background: #0f172a;
+      color: white;
+      padding: 10px;
+    }
+
+    button {
+      width: 100%;
+      padding: 10px;
+      background: #38bdf8;
+      border: none;
+      border-radius: 6px;
+      margin-bottom: 10px;
+      cursor: pointer;
+    }
+
+    #output {
+      background: #1e293b;
+      padding: 10px;
+      border-radius: 6px;
+      height: 200px;
+      overflow-y: auto;
+      font-size: 13px;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+
+  <h3>Live Transcript</h3>
+
+  <button id="start">Start Capture</button>
+  <button id="stop">Stop Capture</button>
+
+  <div id="output"></div>
+
+  <script src="popup.js"></script>
+
+</body>
+</html>
