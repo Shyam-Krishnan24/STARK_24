@@ -6,7 +6,6 @@ let isCapturing = false;
 
 document.addEventListener('DOMContentLoaded', async () => {
   await detectPage();
-  await loadApiKey();
   await loadStats();
   setupListeners();
 });
@@ -46,12 +45,6 @@ async function detectPage() {
   }
 }
 
-async function loadApiKey() {
-  const { apiKey } = await chrome.storage.local.get('apiKey');
-  if (apiKey) {
-    document.getElementById('apiKeyInput').value = apiKey;
-  }
-}
 
 async function loadStats() {
   const { sessions = [] } = await chrome.storage.local.get('sessions');
@@ -119,13 +112,6 @@ function setupListeners() {
     `;
   });
 
-  document.getElementById('saveApiKey').addEventListener('click', async () => {
-    const key = document.getElementById('apiKeyInput').value.trim();
-    if (key) {
-      await chrome.storage.local.set({ apiKey: key });
-      showToast('🔑 API key saved!');
-    }
-  });
 }
 
 function showToast(msg) {

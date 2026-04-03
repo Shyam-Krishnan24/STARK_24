@@ -69,6 +69,7 @@
       font-weight: 800;
       background: linear-gradient(135deg, #a78bfa, #67e8f9);
       -webkit-background-clip: text;
+      background-clip: text;
       -webkit-text-fill-color: transparent;
       line-height: 1;
     }
@@ -194,61 +195,11 @@
       border-color: rgba(167, 139, 250, 0.5);
     }
 
-    /* API Key section */
-    .api-section {
-      margin-top: 14px;
+    .divider {
+      height: 1px;
+      background: rgba(255,255,255,0.06);
+      margin: 14px 0;
     }
-
-    .api-label {
-      font-size: 11px;
-      color: #64748b;
-      letter-spacing: 0.5px;
-      text-transform: uppercase;
-      margin-bottom: 6px;
-    }
-
-    .api-input-row {
-      display: flex;
-      gap: 6px;
-    }
-
-    .api-input {
-      flex: 1;
-      background: rgba(255,255,255,0.05);
-      border: 1px solid rgba(255,255,255,0.1);
-      border-radius: 8px;
-      padding: 9px 12px;
-      color: #e2e8f0;
-      font-family: 'Space Grotesk', sans-serif;
-      font-size: 12px;
-      outline: none;
-      transition: border-color 0.2s;
-    }
-
-    .api-input:focus {
-      border-color: #6366f1;
-      box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
-    }
-
-    .api-input::placeholder { color: #374151; }
-
-    .api-save-btn {
-      padding: 9px 14px;
-      background: rgba(99, 102, 241, 0.2);
-      border: 1px solid rgba(99, 102, 241, 0.4);
-      border-radius: 8px;
-      color: #a78bfa;
-      font-size: 12px;
-      font-weight: 600;
-      cursor: pointer;
-      font-family: 'Space Grotesk', sans-serif;
-      transition: all 0.2s;
-      white-space: nowrap;
-    }
-
-    .api-save-btn:hover { background: rgba(99, 102, 241, 0.3); }
-
-    /* Stats */
     .stats-row {
       display: grid;
       grid-template-columns: 1fr 1fr 1fr;
@@ -270,6 +221,7 @@
       font-weight: 800;
       background: linear-gradient(135deg, #a78bfa, #67e8f9);
       -webkit-background-clip: text;
+      background-clip: text;
       -webkit-text-fill-color: transparent;
       line-height: 1;
     }
@@ -403,14 +355,6 @@
     </button>
 
     <div class="divider"></div>
-
-    <div class="api-section">
-      <div class="api-label">Gemini API Key</div>
-      <div class="api-input-row">
-        <input type="password" class="api-input" id="apiKeyInput" placeholder="AIzaSy...">
-        <button class="api-save-btn" id="saveApiKey">Save</button>
-      </div>
-    </div>
 
     <div class="stats-row">
       <div class="stat-card">

@@ -14,8 +14,8 @@
 
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === 'START_CAPTURE') {
-      startCapture();
-      sendResponse({ success: true });
+      const started = startCapture();
+      sendResponse({ success: started });
     }
     if (message.type === 'STOP_CAPTURE') {
       const transcript = stopCapture();
@@ -82,42 +82,69 @@
   // ── Live Caption Capture ──────────────────────────────────
 
   function startCapture() {
-    if (isCapturing) return;
+    if (isCapturing) return true;
+    
+    // Find the caption container or fall back to body
+    const target = document.querySelector('.ytp-caption-window-container') || document.body;
+    
     isCapturing = true;
     liveTranscriptBuffer = [];
+    
+    console.log('LearnFlow: Starting capture on', target);
 
-    // Watch for caption elements being added/changed
     captionObserver = new MutationObserver((mutations) => {
+      let newText = "";
       mutations.forEach(mutation => {
+        // Look for new segments
         mutation.addedNodes.forEach(node => {
           if (node.nodeType === 1) {
-            const captionText = extractCaptionFromNode(node);
-            if (captionText && captionText.length > 2) {
-              liveTranscriptBuffer.push(captionText);
-              // Send live update
-              chrome.runtime.sendMessage({
-                type: 'LIVE_TRANSCRIPT_UPDATE',
-                text: captionText,
-                buffer: liveTranscriptBuffer.join(' ')
-              }).catch(() => {});
+            const text = extractCaptionFromNode(node);
+            if (text && !liveTranscriptBuffer.includes(text)) {
+              newText += " " + text;
             }
           }
         });
 
-        if (mutation.type === 'characterData') {
+        // Look for text updates (common in ARIA-live or changing spans)
+        if (mutation.type === 'characterData' || mutation.type === 'childList') {
           const text = mutation.target.textContent?.trim();
-          if (text && text.length > 2) {
-            liveTranscriptBuffer.push(text);
+          if (text && text.length > 2 && isCaptionNode(mutation.target)) {
+            if (!liveTranscriptBuffer.includes(text)) {
+              newText += " " + text;
+            }
           }
         }
       });
+
+      if (newText.trim()) {
+        const cleanText = newText.trim();
+        liveTranscriptBuffer.push(cleanText);
+        
+        // Send live update INSTANTLY
+        chrome.runtime.sendMessage({
+          type: 'LIVE_TRANSCRIPT_UPDATE',
+          text: cleanText,
+          buffer: liveTranscriptBuffer.join(' ')
+        }).catch(() => {});
+      }
     });
 
-    captionObserver.observe(document.body, {
+    captionObserver.observe(target, {
       childList: true,
       subtree: true,
       characterData: true
     });
+    
+    return true;
+  }
+
+  function isCaptionNode(node) {
+    const el = node.nodeType === 3 ? node.parentElement : node;
+    return el && (
+      el.classList.contains('ytp-caption-segment') || 
+      el.closest('.ytp-caption-window-container') ||
+      el.closest('.caption-window')
+    );
   }
 
   function stopCapture() {
@@ -276,10 +303,34 @@
   if (isVideoPage) {
     // Wait for page load
     if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', injectCaptureButton);
+      document.addEventListener('DOMContentLoaded', () => {
+        injectCaptureButton();
+        setupAutoTrigger();
+      });
     } else {
-      setTimeout(injectCaptureButton, 1500);
+      setTimeout(() => {
+        injectCaptureButton();
+        setupAutoTrigger();
+      }, 1500);
     }
+  }
+
+  function setupAutoTrigger() {
+    const video = document.querySelector('video');
+    if (video) {
+        video.addEventListener('play', () => {
+            console.log('LearnFlow: Video play detected, starting capture...');
+            startCapture();
+        });
+        
+        // Initial check if already playing
+        if (!video.paused) startCapture();
+    }
+    
+    // For YouTube single page app navigation
+    window.addEventListener('yt-navigate-finish', () => {
+        setTimeout(setupAutoTrigger, 1000);
+    });
   }
 
 })();

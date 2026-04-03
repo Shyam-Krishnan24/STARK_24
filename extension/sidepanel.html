@@ -145,6 +145,7 @@
       font-weight: 800;
       background: linear-gradient(135deg, #a78bfa, #67e8f9);
       -webkit-background-clip: text;
+      background-clip: text;
       -webkit-text-fill-color: transparent;
     }
 
@@ -266,6 +267,7 @@
       font-weight: 800;
       background: linear-gradient(135deg, #a78bfa 30%, #67e8f9);
       -webkit-background-clip: text;
+      background-clip: text;
       -webkit-text-fill-color: transparent;
       margin-bottom: 6px;
     }
@@ -986,6 +988,8 @@
       font-weight: 800;
       background: linear-gradient(135deg, #a78bfa, #67e8f9);
       -webkit-background-clip: text;
+      background-clip: text;
+      background-clip: text;
       -webkit-text-fill-color: transparent;
       margin-bottom: 6px;
     }
@@ -996,6 +1000,8 @@
       font-weight: 800;
       background: linear-gradient(135deg, var(--emerald), var(--cyan));
       -webkit-background-clip: text;
+      background-clip: text;
+      background-clip: text;
       -webkit-text-fill-color: transparent;
       margin-bottom: 4px;
     }
@@ -1055,6 +1061,37 @@
     .toast.error { background: rgba(244,63,94,0.15); border: 1px solid rgba(244,63,94,0.3); color: #fb7185; }
     .toast.info { background: rgba(99,102,241,0.15); border: 1px solid rgba(99,102,241,0.3); color: #a78bfa; }
     .toast.show { opacity: 1; transform: translateY(0); }
+
+    /* ── LIVE STREAM BOX ── */
+    .live-stream-box {
+      background: rgba(0,0,0,0.2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 12px;
+      height: 120px;
+      overflow-y: auto;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      line-height: 1.5;
+      color: #a78bfa;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border) transparent;
+      scroll-behavior: smooth;
+    }
+
+    .stream-item {
+      display: inline;
+      animation: fadeIn 0.3s ease;
+    }
+
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+    .stream-empty {
+      color: var(--text-muted);
+      font-style: italic;
+      text-align: center;
+      margin-top: 30px;
+    }
 
     /* ── API KEY INLINE ── */
     .api-inline {
@@ -1155,15 +1192,14 @@
             </svg>
           </div>
           <h1 class="hero-title">Active Learning Engine</h1>
-          <p class="hero-sub">Transform any video into adaptive practice tests<br>powered by RAG + Gemini AI</p>
+          <p class="hero-sub">Transform video into adaptive practice tests<br>powered by Gemini AI + Local Backend</p>
         </div>
 
-        <!-- API KEY WARNING -->
-        <div class="api-inline" id="apiWarning" style="display:none">
-          <p>⚠️ Set your Gemini API key to enable AI question generation</p>
-          <div class="api-inline-row">
-            <input type="password" id="inlineApiKey" placeholder="AIzaSy...">
-            <button id="inlineApiSave">Save</button>
+        <!-- LIVE STREAM PREVIEW -->
+        <div class="section" id="liveStreamSection" style="margin-bottom:14px">
+          <div class="section-label">Live Learning Stream</div>
+          <div id="liveStream" class="live-stream-box">
+            <div class="stream-empty">Captions will appear here instantly when you play the video...</div>
           </div>
         </div>
 

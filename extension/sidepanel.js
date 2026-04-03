@@ -67,21 +67,8 @@ async function saveHistory() {
 }
 
 async function checkApiKey() {
-  const warn = document.getElementById('apiWarning');
-  if (!state.apiKey) {
-    warn.style.display = 'block';
-    document.getElementById('inlineApiSave').addEventListener('click', async () => {
-      const key = document.getElementById('inlineApiKey').value.trim();
-      if (key) {
-        state.apiKey = key;
-        await chrome.storage.local.set({ apiKey: key });
-        warn.style.display = 'none';
-        showToast('🔑 API key saved!', 'success');
-      }
-    });
-  } else {
-    warn.style.display = 'none';
-  }
+  // Key is now handled by the backend
+  return true;
 }
 
 // ── Page Detection ───────────────────────────────────────────
@@ -276,10 +263,31 @@ async function toggleLiveCapture() {
 
 function setupLiveTranscriptListener() {
   chrome.runtime.onMessage.addListener((msg) => {
-    if (msg.type === 'LIVE_TRANSCRIPT_UPDATE' && msg.buffer) {
-      // Silently update buffer
-      if (msg.buffer.length > state.transcript.length) {
+    if (msg.type === 'LIVE_TRANSCRIPT_UPDATE') {
+      const streamEl = document.getElementById('liveStream');
+      if (streamEl) {
+          // Remove empty state if present
+          const empty = streamEl.querySelector('.stream-empty');
+          if (empty) empty.remove();
+          
+          // Append new text
+          const span = document.createElement('span');
+          span.className = 'stream-item';
+          span.textContent = msg.text + ' ';
+          streamEl.appendChild(span);
+          
+          // Auto-scroll
+          streamEl.scrollTop = streamEl.scrollHeight;
+      }
+      
+      // Update internal buffer
+      if (msg.buffer && msg.buffer.length > state.transcript.length) {
         state.transcript = msg.buffer;
+        
+        // Quietly update transcript status metadata every 10 words
+        if (state.transcript.split(' ').length % 10 === 0) {
+            ingestTranscript(state.transcript, true);
+        }
       }
     }
   });
@@ -314,11 +322,7 @@ async function ingestTranscript(text, silent = false) {
 
 // ── Quiz Start ───────────────────────────────────────────────
 async function startQuiz() {
-  if (!state.apiKey) {
-    showToast('⚠️ Please add your Gemini API key first', 'error');
-    document.getElementById('apiWarning').style.display = 'block';
-    return;
-  }
+  // API key is handled by backend
 
   if (!state.transcript || state.transcript.length < 50) {
     showToast('⚠️ Please extract a transcript first', 'error');
@@ -777,12 +781,9 @@ async function loadSessionsView() {
   }).join('');
 }
 
-// ── Gemini API Call ──────────────────────────────────────────
+// ── Gemini Local Backend Call ────────────────────────────────
 async function callGemini(prompt, systemPrompt = '') {
-  if (!state.apiKey) throw new Error('No API key');
-
-  const MODEL = 'gemini-2.0-flash';
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${state.apiKey}`;
+  const url = 'http://localhost:8000/chat';
 
   const response = await fetch(url, {
     method: 'POST',
@@ -790,28 +791,18 @@ async function callGemini(prompt, systemPrompt = '') {
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
-      contents: [{
-        parts: [{
-          text: (systemPrompt || 'You are LearnFlow AI, an expert educational assessment engine. Generate high-quality practice questions.') + '\n\n' + prompt
-        }]
-      }],
-      generationConfig: {
-        maxOutputTokens: 1000,
-        temperature: 0.7
-      }
+      prompt: prompt,
+      system_instruction: systemPrompt || 'You are LearnFlow AI, an expert educational assessment engine. Generate high-quality practice questions.'
     })
   });
 
   if (!response.ok) {
     const err = await response.json();
-    throw new Error(err.error?.message || `HTTP ${response.status}`);
+    throw new Error(err.detail || `Backend error ${response.status}`);
   }
 
   const data = await response.json();
-  if (data.candidates && data.candidates[0]?.content?.parts?.[0]?.text) {
-    return data.candidates[0].content.parts[0].text;
-  }
-  throw new Error('Invalid response format from Gemini API');
+  return data.text;
 }
 
 // ── Toast ────────────────────────────────────────────────────
