@@ -1,0 +1,76 @@
+﻿class Transcript:
+    def __init__(
+        self,
+        http_client: Session,
+        video_id: str,
+        url: str,
+        language: str,
+        language_code: str,
+        is_generated: bool,
+        translation_languages: List[_TranslationLanguage],
+    ):
+        """
+        You probably don't want to initialize this directly. Usually you'll access Transcript objects using a
+        TranscriptList.
+        """
+        self._http_client = http_client
+        self.video_id = video_id
+        self._url = url
+        self.language = language
+        self.language_code = language_code
+        self.is_generated = is_generated
+        self.translation_languages = translation_languages
+        self._translation_languages_dict = {
+            translation_language.language_code: translation_language.language
+            for translation_language in translation_languages
+        }
+
+    def fetch(self, preserve_formatting: bool = False) -> FetchedTranscript:
+        """
+        Loads the actual transcript data.
+        :param preserve_formatting: whether to keep select HTML text formatting
+        """
+        if "&exp=xpe" in self._url:
+            raise PoTokenRequired(self.video_id)
+        response = self._http_client.get(self._url)
+        snippets = _TranscriptParser(preserve_formatting=preserve_formatting).parse(
+            _raise_http_errors(response, self.video_id).text,
+        )
+        return FetchedTranscript(
+            snippets=snippets,
+            video_id=self.video_id,
+            language=self.language,
+            language_code=self.language_code,
+            is_generated=self.is_generated,
+        )
+
+    def __str__(self) -> str:
+        return '{language_code} ("{language}"){translation_description}'.format(
+            language=self.language,
+            language_code=self.language_code,
+            translation_description="[TRANSLATABLE]" if self.is_translatable else "",
+        )
+
+    @property
+    def is_translatable(self) -> bool:
+        return len(self.translation_languages) > 0
+
+    def translate(self, language_code: str) -> "Transcript":
+        if not self.is_translatable:
+            raise NotTranslatable(self.video_id)
+
+        if language_code not in self._translation_languages_dict:
+            raise TranslationLanguageNotAvailable(self.video_id)
+
+        return Transcript(
+            self._http_client,
+            self.video_id,
+            "{url}&tlang={language_code}".format(
+                url=self._url, language_code=language_code
+            ),
+            self._translation_languages_dict[language_code],
+            language_code,
+            True,
+            [],
+        )
+

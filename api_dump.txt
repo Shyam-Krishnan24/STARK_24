@@ -1,0 +1,10 @@
+=== TranscriptList ===
+build: (http_client: requests.sessions.Session, video_id: str, captions_json: Dict) -> 'TranscriptList'
+find_generated_transcript: (self, language_codes: Iterable[str]) -> youtube_transcript_api._transcripts.Transcript
+find_manually_created_transcript: (self, language_codes: Iterable[str]) -> youtube_transcript_api._transcripts.Transcript
+find_transcript: (self, language_codes: Iterable[str]) -> youtube_transcript_api._transcripts.Transcript
+
+=== Transcript ===
+fetch: (self, preserve_formatting: bool = False) -> youtube_transcript_api._transcripts.FetchedTranscript
+is_translatable: (prop/not callable)
+translate: (self, language_code: str) -> 'Transcript'

@@ -249,11 +249,15 @@
     let platform = 'Generic';
 
     if (hostname.includes('youtube.com')) {
+      const urlParams = new URLSearchParams(window.location.search);
+      const videoId = urlParams.get('v');
+      
       title = document.querySelector('h1.ytd-watch-metadata yt-formatted-string')?.textContent ||
               document.querySelector('.title')?.textContent || title;
       const video = document.querySelector('video');
       duration = video?.duration || 0;
       platform = 'YouTube';
+      return { title, url, duration, platform, videoId };
     } else if (hostname.includes('coursera.org')) {
       platform = 'Coursera';
     } else if (hostname.includes('udemy.com')) {

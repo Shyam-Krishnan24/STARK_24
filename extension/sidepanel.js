@@ -24,7 +24,12 @@ const state = {
 
   // Performance tracking
   history: [],
-  difficultyProgress: { easy: { correct: 0, total: 0 }, medium: { correct: 0, total: 0 }, hard: { correct: 0, total: 0 } }
+  difficultyProgress: { easy: { correct: 0, total: 0 }, medium: { correct: 0, total: 0 }, hard: { correct: 0, total: 0 } },
+
+  // Auto-sync transcript state
+  fullTranscriptItems: [],
+  lastSyncedTimestamp: -1,
+  playbackTicker: null
 };
 
 // ── Init ─────────────────────────────────────────────────────
@@ -94,15 +99,142 @@ async function detectCurrentPage() {
     if (matched) {
       platformBadge.textContent = `${matched.emoji} ${matched.name}`;
       videoTitle.textContent = title.replace(/ - YouTube$| - Coursera$/, '').substring(0, 80);
-      state.videoMeta = { title: title, url, platform: matched.name };
+      
+      // Get detailed meta (including videoId) from content script
+      try {
+        const meta = await chrome.tabs.sendMessage(tab.id, { type: 'GET_VIDEO_META' });
+        state.videoMeta = { ...meta, platform: matched.name };
+
+        if (matched.name === 'YouTube' && meta.videoId) {
+          await fetchTranscriptFromBackend(meta.videoId);
+          startPlaybackTicker(tab.id);
+        }
+      } catch (e) {
+        console.log('Connection lost to page:', e);
+        showToast('⚠️ Reconnecting... please refresh the video page', 'error');
+      }
     } else {
       platformBadge.textContent = '🌐 Web Page';
       videoTitle.textContent = title.substring(0, 80) || 'Navigate to a video or course';
       state.videoMeta = { title, url, platform: 'Generic' };
     }
   } catch (e) {
-    console.log('Page detection failed:', e);
+    console.log('Page detection failed or content script not ready:', e);
   }
+}
+
+// ── Background Fetching & Sync ───────────────────────────────
+async function fetchTranscriptFromBackend(videoId) {
+  try {
+    const response = await fetch(`http://localhost:8000/transcript/${videoId}`);
+    if (!response.ok) throw new Error('No transcript available in backend');
+
+    const data = await response.json();
+    state.fullTranscriptItems = data.transcript; // Array of {text, start, duration}
+
+    const fullText = data.transcript.map(t => t.text).join(' ');
+    await ingestTranscript(fullText);
+
+    // ── Show language / translation info ────────────────
+    if (data.was_translated && data.source_language) {
+      showTranslationBadge(data.source_language);
+      showToast(`🌐 Translated from ${data.source_language} → English`, 'success');
+    } else {
+      showToast('✨ Auto-synced English transcript!', 'success');
+    }
+  } catch (e) {
+    console.log('Backend transcript fetch failed:', e);
+    // Fallback to manual methods already in UI
+  }
+}
+
+/**
+ * Injects a small "Translated from X → English" pill beneath the transcript
+ * status card so the user always knows the source language.
+ */
+function showTranslationBadge(sourceLang) {
+  // Remove any existing badge
+  const existing = document.getElementById('translationBadge');
+  if (existing) existing.remove();
+
+  const badge = document.createElement('div');
+  badge.id = 'translationBadge';
+  badge.style.cssText = [
+    'display:inline-flex',
+    'align-items:center',
+    'gap:5px',
+    'margin-top:6px',
+    'padding:4px 10px',
+    'border-radius:20px',
+    'background:rgba(6,182,212,0.10)',
+    'border:1px solid rgba(6,182,212,0.28)',
+    'font-size:10px',
+    'font-weight:700',
+    'color:#67e8f9',
+    'letter-spacing:0.4px',
+  ].join(';');
+  badge.innerHTML = `🌐 Translated: ${sourceLang} &rarr; English`;
+
+  // Insert right below the transcript status block
+  const statusEl = document.getElementById('transcriptStatus');
+  if (statusEl && statusEl.parentNode) {
+    statusEl.parentNode.insertBefore(badge, statusEl.nextSibling);
+  }
+}
+
+function startPlaybackTicker(tabId) {
+  if (state.playbackTicker) clearInterval(state.playbackTicker);
+  
+  state.playbackTicker = setInterval(async () => {
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!tab || tab.id !== tabId) return;
+
+      const meta = await chrome.tabs.sendMessage(tabId, { type: 'GET_VIDEO_META' });
+      const currentTime = meta.duration ? (meta.elapsed || 0) : 0; // Need to ensure elapsed is sent
+      
+      // Since getVideoMeta doesn't send 'elapsed', we should probably add it or use a separate message
+      const result = await chrome.scripting.executeScript({
+        target: { tabId },
+        func: () => document.querySelector('video')?.currentTime || 0
+      });
+      
+      const time = result[0].result;
+      syncTranscriptToUI(time);
+    } catch (e) {
+      clearInterval(state.playbackTicker);
+    }
+  }, 2000);
+}
+
+function syncTranscriptToUI(time) {
+  if (!state.fullTranscriptItems) return;
+  
+  // Find segments that just passed or are current
+  const currentSegments = state.fullTranscriptItems.filter(item => 
+    time >= item.start && time <= (item.start + item.duration + 1)
+  );
+
+  currentSegments.forEach(seg => {
+    // Only send if it's "new" to avoid spamming the UI
+    if (state.lastSyncedTimestamp !== seg.start) {
+      state.lastSyncedTimestamp = seg.start;
+      
+      // Update the "Live Learning Stream" box
+      const streamEl = document.getElementById('liveStream');
+      if (streamEl) {
+        const empty = streamEl.querySelector('.stream-empty');
+        if (empty) empty.remove();
+        
+        const span = document.createElement('span');
+        span.className = 'stream-item';
+        span.style.color = 'var(--indigo)'; // Highlight auto-synced text
+        span.textContent = seg.text + ' ';
+        streamEl.appendChild(span);
+        streamEl.scrollTop = streamEl.scrollHeight;
+      }
+    }
+  });
 }
 
 // ── Tab Navigation ───────────────────────────────────────────
@@ -785,24 +917,38 @@ async function loadSessionsView() {
 async function callGemini(prompt, systemPrompt = '') {
   const url = 'http://localhost:8000/chat';
 
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      prompt: prompt,
-      system_instruction: systemPrompt || 'You are LearnFlow AI, an expert educational assessment engine. Generate high-quality practice questions.'
-    })
-  });
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        prompt: prompt,
+        system_instruction: systemPrompt || 'You are LearnFlow AI, an expert educational assessment engine. Generate high-quality practice questions.'
+      })
+    });
 
-  if (!response.ok) {
-    const err = await response.json();
-    throw new Error(err.detail || `Backend error ${response.status}`);
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      const msg = err.detail || `Server error (${response.status})`;
+      
+      if (response.status === 429) {
+        showToast('🛑 API Limit Reached! Check your Gemini key quota.', 'error');
+        throw new Error('QUOTA_EXCEEDED');
+      }
+      
+      throw new Error(msg);
+    }
+
+    const data = await response.json();
+    return data.text;
+  } catch (e) {
+    if (e.message !== 'QUOTA_EXCEEDED') {
+      showToast('❌ Backend Offline: Ensure main.py is running', 'error');
+    }
+    throw e;
   }
-
-  const data = await response.json();
-  return data.text;
 }
 
 // ── Toast ────────────────────────────────────────────────────

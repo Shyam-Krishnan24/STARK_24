@@ -1,5 +1,5 @@
 // ============================================================
-// LearnFlow AI — Popup Script
+// LearnFlow AI — v1.0.1-SYNC-FIX
 // ============================================================
 
 let isCapturing = false;
@@ -68,20 +68,25 @@ function setupListeners() {
 
   document.getElementById('captureBtn').addEventListener('click', async () => {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!isCapturing) {
-      await chrome.tabs.sendMessage(tab.id, { type: 'START_CAPTURE' });
-      isCapturing = true;
-      document.getElementById('captureBtnText').textContent = 'Stop Live Capture';
-      document.getElementById('captureIndicator').classList.add('active');
-      await chrome.storage.local.set({ captureTabId: tab.id, isCapturing: true });
-      showToast('🔴 Live capture started!');
-    } else {
-      const result = await chrome.tabs.sendMessage(tab.id, { type: 'STOP_CAPTURE' });
-      isCapturing = false;
-      document.getElementById('captureBtnText').textContent = 'Start Live Capture';
-      document.getElementById('captureIndicator').classList.remove('active');
-      await chrome.storage.local.set({ isCapturing: false, capturedTranscript: result?.transcript });
-      showToast('✅ Capture saved! Open panel to analyze.');
+    try {
+      if (!isCapturing) {
+        await chrome.tabs.sendMessage(tab.id, { type: 'START_CAPTURE' });
+        isCapturing = true;
+        document.getElementById('captureBtnText').textContent = 'Stop Live Capture';
+        document.getElementById('captureIndicator').classList.add('active');
+        await chrome.storage.local.set({ captureTabId: tab.id, isCapturing: true });
+        showToast('🔴 Live capture started!');
+      } else {
+        const result = await chrome.tabs.sendMessage(tab.id, { type: 'STOP_CAPTURE' });
+        isCapturing = false;
+        document.getElementById('captureBtnText').textContent = 'Start Live Capture';
+        document.getElementById('captureIndicator').classList.remove('active');
+        await chrome.storage.local.set({ isCapturing: false, capturedTranscript: result?.transcript });
+        showToast('✅ Capture saved! Open panel to analyze.');
+      }
+    } catch (e) {
+      console.error('Connection error:', e);
+      showToast('⚠️ Connection lost. Please refresh the page.');
     }
   });
 
@@ -99,7 +104,8 @@ function setupListeners() {
         showToast('⚠️ No transcript found');
       }
     } catch (e) {
-      showToast('❌ Could not extract — try Live Capture');
+      console.error('Connection error:', e);
+      showToast('⚠️ Connection lost. Please refresh the page.');
     }
 
     document.getElementById('extractBtn').disabled = false;
