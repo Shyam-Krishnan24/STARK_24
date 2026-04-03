@@ -22,12 +22,13 @@ def analyze_topics(text):
 
 
 def get_youtube_text(video_id):
-    transcript = YouTubeTranscriptApi.get_transcript(video_id)
-    text = " ".join([t['text'] for t in transcript])
+    api = YouTubeTranscriptApi()
+    transcript = api.fetch(video_id)
+    text = " ".join([t.text for t in transcript])
     return text
 
 
-# 🔥 MAIN EXECUTION
+# 🔥 MAIN
 if __name__ == "__main__":
 
     print("Choose input type:")
@@ -36,17 +37,13 @@ if __name__ == "__main__":
 
     choice = input("Enter choice (1 or 2): ")
 
-    # ✅ OPTION 1: SAMPLE TEXT
     if choice == "1":
         text = """
         Python loops are used to iterate over a sequence.
         There are two types of loops: for loop and while loop.
         A for loop is used when the number of iterations is known.
-        A while loop is used when the condition is true.
-        Loops help in reducing code repetition and improve efficiency.
         """
 
-    # ✅ OPTION 2: YOUTUBE VIDEO
     elif choice == "2":
         video_id = input("Enter YouTube Video ID: ")
         text = get_youtube_text(video_id)
@@ -55,7 +52,6 @@ if __name__ == "__main__":
         print("Invalid choice ❌")
         exit()
 
-    # 🔥 PROCESSING
     topics = analyze_topics(text)
 
     print("\n✅ FINAL TOPICS:\n")
