@@ -32,6 +32,10 @@ class ChatRequest(BaseModel):
         "You are LearnFlow AI, an expert educational assessment engine."
     )
 
+class TranslateRequest(BaseModel):
+    text: str
+    target_language: str
+
 
 # ── Helper: normalise a segment to a plain dict ───────────────
 def _seg(s) -> dict:
@@ -69,6 +73,23 @@ async def chat(request: ChatRequest):
         return {"text": response.choices[0].message.content}
     except Exception as e:
         print(f"[LearnFlow] Groq error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/translate")
+async def translate_text(request: TranslateRequest):
+    try:
+        system_prompt = f"You are a professional translator. Translate the following text directly into {request.target_language}. Respond ONLY with the completely translated text, keeping formatting exactly as it was. Do not include any explanations, greetings, or conversational filler."
+        response = _groq_client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": request.text}
+            ],
+            temperature=0.3
+        )
+        return {"text": response.choices[0].message.content}
+    except Exception as e:
+        print(f"[LearnFlow] Groq translate error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
