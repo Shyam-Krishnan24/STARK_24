@@ -35,6 +35,17 @@
       openYouTubeTranscriptPanel().then(t => sendResponse({ transcript: t }));
       return true;
     }
+    // ── New: return the YouTube video ID from the current URL
+    if (message.type === 'GET_VIDEO_ID') {
+      const params = new URLSearchParams(window.location.search);
+      const videoId = params.get('v') || null;
+      sendResponse({ videoId, url: window.location.href });
+    }
+    // ── New: return the video element's current playback position
+    if (message.type === 'GET_CURRENT_TIME') {
+      const video = document.querySelector('video');
+      sendResponse({ currentTime: video ? video.currentTime : 0 });
+    }
     return true;
   });
 
@@ -318,19 +329,33 @@
   function setupAutoTrigger() {
     const video = document.querySelector('video');
     if (video) {
-        video.addEventListener('play', () => {
-            console.log('LearnFlow: Video play detected, starting capture...');
-            startCapture();
-        });
-        
-        // Initial check if already playing
-        if (!video.paused) startCapture();
+      video.addEventListener('play', () => {
+        console.log('LearnFlow: Video play detected, starting CC capture...');
+        startCapture();
+      });
+      // Initial check if already playing
+      if (!video.paused) startCapture();
     }
-    
-    // For YouTube single page app navigation
-    window.addEventListener('yt-navigate-finish', () => {
-        setTimeout(setupAutoTrigger, 1000);
-    });
   }
+
+  // ── YouTube SPA navigation handler ───────────────────────
+  // Fires when the user clicks a new video without a full page reload.
+  // Notifies the sidepanel so it can auto-refetch the transcript.
+  window.addEventListener('yt-navigate-finish', () => {
+    setTimeout(() => {
+      setupAutoTrigger();
+      // Only broadcast on a video watch page
+      const params = new URLSearchParams(window.location.search);
+      const videoId = params.get('v');
+      if (videoId) {
+        chrome.runtime.sendMessage({
+          type: 'YT_VIDEO_CHANGED',
+          videoId,
+          url: window.location.href,
+          title: document.title
+        }).catch(() => {});
+      }
+    }, 1200);
+  });
 
 })();

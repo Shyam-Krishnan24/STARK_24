@@ -1027,6 +1027,7 @@
       display: flex;
       flex-wrap: wrap;
       gap: 6px;
+      margin-bottom: 8px;
     }
 
     .concept-tag {
@@ -1037,6 +1038,63 @@
       font-size: 11px;
       color: #a78bfa;
       font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+      user-select: none;
+    }
+
+    .concept-tag:hover {
+      background: rgba(99,102,241,0.15);
+      border-color: rgba(99,102,241,0.45);
+      transform: translateY(-1px);
+    }
+
+    .concept-tag.selected {
+      background: linear-gradient(135deg, rgba(99,102,241,0.3), rgba(139,92,246,0.3));
+      border-color: var(--indigo);
+      color: #fff;
+      font-weight: 700;
+      box-shadow: 0 0 8px rgba(99,102,241,0.25);
+    }
+
+    .concept-tag.selected::before {
+      content: '✓ ';
+      font-size: 9px;
+    }
+
+    .selected-concepts-hint {
+      font-size: 10px;
+      color: var(--text-muted);
+      font-style: italic;
+      transition: color 0.3s;
+    }
+
+    .selected-concepts-hint.active {
+      color: #a78bfa;
+      font-style: normal;
+      font-weight: 600;
+    }
+
+    /* ── DIFFICULTY-TINTED QUESTION CARD ── */
+    .question-card.difficulty-easy {
+      border-left: 3px solid var(--emerald);
+    }
+    .question-card.difficulty-easy::before {
+      background: linear-gradient(90deg, transparent, rgba(16,185,129,0.5), transparent);
+    }
+
+    .question-card.difficulty-medium {
+      border-left: 3px solid var(--amber);
+    }
+    .question-card.difficulty-medium::before {
+      background: linear-gradient(90deg, transparent, rgba(245,158,11,0.5), transparent);
+    }
+
+    .question-card.difficulty-hard {
+      border-left: 3px solid var(--rose);
+    }
+    .question-card.difficulty-hard::before {
+      background: linear-gradient(90deg, transparent, rgba(244,63,94,0.5), transparent);
     }
 
     /* ── TOAST ── */
@@ -1225,8 +1283,9 @@
 
         <!-- CONCEPTS -->
         <div class="concepts-section hidden" id="conceptsSection">
-          <div class="section-label">Key Concepts</div>
+          <div class="section-label">Key Concepts <span style="font-weight:400;font-size:9px;text-transform:none;letter-spacing:0;color:var(--text-muted)">(click to select focus topics)</span></div>
           <div class="concept-tags" id="conceptTags"></div>
+          <div class="selected-concepts-hint" id="selectedConceptsHint">Click any concept to focus the quiz on specific topics</div>
         </div>
 
         <!-- EXTRACTION METHODS -->
@@ -1253,6 +1312,11 @@
               <div class="method-name">Paste Text</div>
               <div class="method-desc">Any text content</div>
             </button>
+            <button class="method-btn" id="btnVideoAudio">
+              <div class="method-icon">🎧</div>
+              <div class="method-name">Tab Audio</div>
+              <div class="method-desc">Stream video audio</div>
+            </button>
           </div>
         </div>
 
@@ -1260,6 +1324,17 @@
         <div id="pasteArea" class="hidden" style="margin-bottom:12px">
           <textarea id="pasteTextarea" class="short-answer-input" placeholder="Paste lecture notes, transcript, article, or any educational text here..." style="min-height:100px;width:100%"></textarea>
           <button class="submit-btn" id="btnProcessPaste" style="margin-top:6px">Process Text</button>
+        </div>
+
+        <!-- TAB AUDIO AREA -->
+        <div id="audioArea" class="hidden" style="margin-bottom:12px; background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px;">
+          <div class="indicator" style="margin-bottom: 8px;">
+            <div id="audioStatus" style="font-size:12px; color:var(--text-secondary); margin-bottom:8px;">Ready to listen to the current tab. Make sure the video is playing.</div>
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <button class="submit-btn" id="btnStartAudio" style="flex: 1; margin: 0; padding: 10px;">Start Recording</button>
+            <button class="next-btn" id="btnStopAudio" style="flex: 1; display: block; margin: 0; padding: 10px; opacity: 0.5;" disabled>Stop Recording</button>
+          </div>
         </div>
 
         <!-- DIFFICULTY SELECTION -->
@@ -1448,6 +1523,6 @@
   <div class="toast" id="toast"></div>
 
   <script src="vectorDB.js"></script>
-  <script src="sidepanel.js"></script>
+  <script src="sp_v5.js"></script>
 </body>
 </html>

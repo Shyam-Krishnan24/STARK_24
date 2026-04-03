@@ -22,6 +22,14 @@ const state = {
   answers: [],
   sessionId: null,
 
+  // Concept focus
+  selectedConcepts: [],
+
+  // Auto-transcript (API-based, no CC required)
+  transcriptSegments: [],
+  tickerInterval: null,
+  lastAutoFetchedVideoId: null,
+
   // Performance tracking
   history: [],
   difficultyProgress: { easy: { correct: 0, total: 0 }, medium: { correct: 0, total: 0 }, hard: { correct: 0, total: 0 } }
@@ -95,6 +103,15 @@ async function detectCurrentPage() {
       platformBadge.textContent = `${matched.emoji} ${matched.name}`;
       videoTitle.textContent = title.replace(/ - YouTube$| - Coursera$/, '').substring(0, 80);
       state.videoMeta = { title: title, url, platform: matched.name };
+
+      // ── Auto-fetch transcript for YouTube (no CC required) ──
+      if (matched.name === 'YouTube') {
+        try {
+          const params = new URLSearchParams(new URL(url).search);
+          const videoId = params.get('v');
+          if (videoId) autoFetchYouTubeTranscript(tab, videoId);
+        } catch (_) {}
+      }
     } else {
       platformBadge.textContent = '🌐 Web Page';
       videoTitle.textContent = title.substring(0, 80) || 'Navigate to a video or course';
@@ -164,13 +181,115 @@ function setupHomeView() {
   document.getElementById('btnPasteText').addEventListener('click', () => {
     const area = document.getElementById('pasteArea');
     area.classList.toggle('hidden');
+    document.getElementById('voiceArea').classList.add('hidden');
   });
 
-  document.getElementById('btnProcessPaste').addEventListener('click', () => {
-    const text = document.getElementById('pasteTextarea').value.trim();
-    if (text.length < 50) { showToast('⚠️ Please enter more text', 'error'); return; }
-    ingestTranscript(text);
+  document.getElementById('btnVideoAudio').addEventListener('click', () => {
+    const area = document.getElementById('audioArea');
+    area.classList.toggle('hidden');
     document.getElementById('pasteArea').classList.add('hidden');
+  });
+
+  // Tab Audio Recording State
+  let mediaRecorder;
+  let audioContext;
+
+  async function sendAudioToWhisper(blob) {
+    try {
+      const formData = new FormData();
+      formData.append("file", blob, "chunk.webm");
+      
+      const response = await fetch("http://localhost:8000/transcribe_chunk", {
+        method: "POST",
+        body: formData
+      });
+      
+      const data = await response.json();
+      if (data.text && data.text.trim()) {
+        const streamEl = document.getElementById('liveStream');
+        if (streamEl) {
+          const empty = streamEl.querySelector('.stream-empty');
+          if (empty) empty.remove();
+          
+          const span = document.createElement('span');
+          span.className = 'stream-item';
+          span.textContent = data.text + ' ';
+          streamEl.appendChild(span);
+          streamEl.scrollTop = streamEl.scrollHeight;
+        }
+        state.transcript += " " + data.text;
+        ingestTranscript(state.transcript, true);
+      }
+    } catch (e) {
+      console.error("Transcription error:", e);
+    }
+  }
+
+  document.getElementById('btnStartAudio').addEventListener('click', async () => {
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!tab) throw new Error("No active tab");
+
+      const response = await chrome.runtime.sendMessage({ type: 'GET_TAB_STREAM_ID', tabId: tab.id });
+      if (response.error || !response.streamId) {
+        throw new Error(response.error || "Failed to get stream ID");
+      }
+
+      const streamId = response.streamId;
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          mandatory: {
+            chromeMediaSource: 'tab',
+            chromeMediaSourceId: streamId
+          }
+        }
+      });
+
+      // Route audio back to speakers so user can still hear the video
+      audioContext = new AudioContext();
+      const source = audioContext.createMediaStreamSource(stream);
+      source.connect(audioContext.destination);
+
+      mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      
+      mediaRecorder.ondataavailable = async (e) => {
+        if (e.data.size > 0) {
+          await sendAudioToWhisper(e.data);
+        }
+      };
+
+      // Record and send chunks every 10 seconds
+      mediaRecorder.start(10000);
+      
+      document.getElementById('audioStatus').textContent = "🔴 Recording and analyzing tab audio live...";
+      document.getElementById('btnStartAudio').disabled = true;
+      document.getElementById('btnStartAudio').style.opacity = '0.5';
+      document.getElementById('btnStopAudio').disabled = false;
+      document.getElementById('btnStopAudio').style.opacity = '1';
+      
+      // Turn on Live Stream section
+      document.getElementById('liveStreamSection').classList.remove('hidden');
+
+    } catch (e) {
+      console.error(e);
+      showToast("Start capture failed: " + e.message, "error");
+    }
+  });
+
+  document.getElementById('btnStopAudio').addEventListener('click', () => {
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+      mediaRecorder.stop();
+      mediaRecorder.stream.getTracks().forEach(t => t.stop());
+    }
+    if (audioContext) {
+      audioContext.close();
+    }
+    document.getElementById('audioStatus').textContent = "Ready to listen to the current tab.";
+    document.getElementById('btnStartAudio').disabled = false;
+    document.getElementById('btnStartAudio').style.opacity = '1';
+    document.getElementById('btnStopAudio').disabled = true;
+    document.getElementById('btnStopAudio').style.opacity = '0.5';
+    showToast("✅ Stopped audio capture", "success");
   });
 
   // Generate button
@@ -229,15 +348,46 @@ async function toggleLiveCapture() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
   if (!state.isCapturing) {
+    // ── Strategy 1: Try the backend API (works without CC enabled) ──
+    btn.querySelector('.method-icon').textContent = '⏳';
+    btn.querySelector('.method-name').textContent = 'Fetching...';
+    btn.style.opacity = '0.7';
+
+    try {
+      const idResult = await chrome.tabs.sendMessage(tab.id, { type: 'GET_VIDEO_ID' });
+      if (idResult?.videoId) {
+        showToast('🔍 Fetching transcript from YouTube API...', 'info');
+        const data = await fetchYouTubeTranscript(idResult.videoId);
+        if (data && data.segments?.length > 0) {
+          state.transcriptSegments = data.segments;
+          state.lastAutoFetchedVideoId = idResult.videoId;
+          await ingestTranscript(data.plain_text);
+          startPlaybackTicker(tab, data.segments);
+          // Mark as "capturing" so Stop button works
+          state.isCapturing = true;
+          btn.querySelector('.method-icon').textContent = '⏹';
+          btn.querySelector('.method-name').textContent = 'Stop Stream';
+          btn.style.borderColor = 'var(--emerald)';
+          btn.style.color = 'var(--emerald)';
+          btn.style.opacity = '';
+          showToast(`✅ Transcript streaming (${data.language}) — no CC needed!`, 'success');
+          return;
+        }
+      }
+    } catch (_) {}
+
+    // ── Strategy 2: Fall back to CC screen-scraping ──
+    showToast('⚠️ No API transcript — falling back to CC capture', 'info');
     await chrome.tabs.sendMessage(tab.id, { type: 'START_CAPTURE' });
     state.isCapturing = true;
     btn.querySelector('.method-icon').textContent = '⏹';
     btn.querySelector('.method-name').textContent = 'Stop Capture';
     btn.style.borderColor = 'var(--rose)';
     btn.style.color = 'var(--rose)';
-    showToast('🔴 Live capture started! Watch the video.', 'info');
+    btn.style.opacity = '';
+    showToast('🔴 CC capture started — enable CC on YouTube!', 'info');
 
-    // Auto-pull transcript every 10 seconds
+    // Auto-pull CC transcript every 10 s
     state.captureInterval = setInterval(async () => {
       const r = await chrome.tabs.sendMessage(tab.id, { type: 'GET_LIVE_TRANSCRIPT' });
       if (r?.transcript && r.transcript.length > 100) {
@@ -246,13 +396,16 @@ async function toggleLiveCapture() {
     }, 10000);
 
   } else {
+    // ── Stop everything ──
+    if (state.tickerInterval) { clearInterval(state.tickerInterval); state.tickerInterval = null; }
     clearInterval(state.captureInterval);
-    const result = await chrome.tabs.sendMessage(tab.id, { type: 'STOP_CAPTURE' });
+    const result = await chrome.tabs.sendMessage(tab.id, { type: 'STOP_CAPTURE' }).catch(() => ({}));
     state.isCapturing = false;
     btn.querySelector('.method-icon').textContent = '🔴';
     btn.querySelector('.method-name').textContent = 'Live Capture';
     btn.style.borderColor = '';
     btn.style.color = '';
+    btn.style.opacity = '';
 
     if (result?.transcript && result.transcript.length > 50) {
       await ingestTranscript(result.transcript);
@@ -263,32 +416,44 @@ async function toggleLiveCapture() {
 
 function setupLiveTranscriptListener() {
   chrome.runtime.onMessage.addListener((msg) => {
+    // ── Live stream text update (from CC scraper OR playback ticker)
     if (msg.type === 'LIVE_TRANSCRIPT_UPDATE') {
       const streamEl = document.getElementById('liveStream');
       if (streamEl) {
-          // Remove empty state if present
-          const empty = streamEl.querySelector('.stream-empty');
-          if (empty) empty.remove();
-          
-          // Append new text
-          const span = document.createElement('span');
-          span.className = 'stream-item';
-          span.textContent = msg.text + ' ';
-          streamEl.appendChild(span);
-          
-          // Auto-scroll
-          streamEl.scrollTop = streamEl.scrollHeight;
+        const empty = streamEl.querySelector('.stream-empty');
+        if (empty) empty.remove();
+
+        const span = document.createElement('span');
+        span.className = 'stream-item';
+        span.textContent = msg.text + ' ';
+        streamEl.appendChild(span);
+        streamEl.scrollTop = streamEl.scrollHeight;
       }
-      
-      // Update internal buffer
+
+      // Update internal buffer for RAG (only grow, never shrink)
       if (msg.buffer && msg.buffer.length > state.transcript.length) {
         state.transcript = msg.buffer;
-        
-        // Quietly update transcript status metadata every 10 words
         if (state.transcript.split(' ').length % 10 === 0) {
-            ingestTranscript(state.transcript, true);
+          ingestTranscript(state.transcript, true);
         }
       }
+    }
+
+    // ── YouTube SPA navigation: video changed, auto-refetch transcript
+    if (msg.type === 'YT_VIDEO_CHANGED') {
+      chrome.tabs.query({ active: true, currentWindow: true }).then(([tab]) => {
+        if (!tab) return;
+        // Update UI title
+        const videoTitleEl = document.getElementById('videoTitle');
+        if (videoTitleEl && msg.title)
+          videoTitleEl.textContent = msg.title.replace(/ - YouTube$/, '').substring(0, 80);
+        state.videoMeta.url = msg.url;
+        state.videoMeta.title = msg.title || state.videoMeta.title;
+        // Fetch transcript for the new video
+        if (msg.videoId && msg.videoId !== state.lastAutoFetchedVideoId) {
+          autoFetchYouTubeTranscript(tab, msg.videoId);
+        }
+      });
     }
   });
 }
@@ -298,6 +463,8 @@ async function ingestTranscript(text, silent = false) {
   if (!text || text.length < 50) return;
 
   state.transcript = text;
+  // Reset concept selections whenever a new transcript is loaded
+  state.selectedConcepts = [];
   const result = state.rag.ingestTranscript(text, state.videoMeta);
 
   // Update UI
@@ -305,16 +472,48 @@ async function ingestTranscript(text, silent = false) {
   const metaEl = document.getElementById('transcriptMeta');
   const conceptsSection = document.getElementById('conceptsSection');
   const conceptTags = document.getElementById('conceptTags');
+  const hintEl = document.getElementById('selectedConceptsHint');
 
   statusEl.classList.remove('hidden');
   metaEl.textContent = `${text.split(' ').length.toLocaleString()} words · ${result.concepts.length} concepts · ${result.chunkCount} chunks`;
 
-  // Show concept tags
+  // Show concept tags — each is clickable to narrow the quiz focus
   if (result.concepts.length > 0) {
     conceptsSection.classList.remove('hidden');
     conceptTags.innerHTML = result.concepts.slice(0, 12).map(c =>
-      `<span class="concept-tag">${c}</span>`
+      `<span class="concept-tag" data-concept="${c}">${c}</span>`
     ).join('');
+
+    // Reset hint
+    if (hintEl) {
+      hintEl.textContent = 'Click any concept to focus the quiz on specific topics';
+      hintEl.classList.remove('active');
+    }
+
+    // Attach click handlers to each tag
+    conceptTags.querySelectorAll('.concept-tag').forEach(tag => {
+      tag.addEventListener('click', () => {
+        tag.classList.toggle('selected');
+        const concept = tag.dataset.concept;
+        if (tag.classList.contains('selected')) {
+          if (!state.selectedConcepts.includes(concept))
+            state.selectedConcepts.push(concept);
+        } else {
+          state.selectedConcepts = state.selectedConcepts.filter(c => c !== concept);
+        }
+        // Update hint text
+        if (hintEl) {
+          const count = state.selectedConcepts.length;
+          if (count === 0) {
+            hintEl.textContent = 'Click any concept to focus the quiz on specific topics';
+            hintEl.classList.remove('active');
+          } else {
+            hintEl.textContent = `✨ ${count} concept${count > 1 ? 's' : ''} selected — questions will focus on ${count > 1 ? 'these' : 'this'}`;
+            hintEl.classList.add('active');
+          }
+        }
+      });
+    });
   }
 
   if (!silent) showToast(`📚 ${result.chunkCount} chunks indexed in vector store`, 'success');
@@ -359,10 +558,16 @@ async function generateQuestions() {
   // Generate questions in batch but show progress
   const diffProgression = buildDifficultyProgression();
 
+  // Use selected concepts if any, else fall back to all extracted concepts
+  const conceptPool = state.selectedConcepts.length > 0
+    ? state.selectedConcepts
+    : (state.rag.concepts.length > 0 ? state.rag.concepts : ['main topic']);
+
   for (let i = 0; i < state.questionCount; i++) {
     loadingText.textContent = `Question ${i + 1} of ${state.questionCount}...`;
     const diff = diffProgression[i];
-    const concept = state.rag.concepts[i % state.rag.concepts.length] || 'main topic';
+    // Distribute questions evenly across the concept pool
+    const concept = conceptPool[i % conceptPool.length];
 
     try {
       const prompt = state.rag.buildQuestionPrompt(diff, state.history.slice(-20), concept);
@@ -467,6 +672,12 @@ function renderQuestion() {
   const chip = document.getElementById('diffChip');
   chip.textContent = q.difficulty.toUpperCase();
   chip.className = `diff-chip ${q.difficulty}`;
+
+  // Colour the question card border by difficulty
+  const questionCard = document.querySelector('#quizActive .question-card');
+  if (questionCard) {
+    questionCard.className = `question-card difficulty-${q.difficulty}`;
+  }
 
   // Question
   document.getElementById('conceptLabel').textContent = q.concept_tag;
@@ -779,6 +990,81 @@ async function loadSessionsView() {
       </div>
     `;
   }).join('');
+}
+
+// ── YouTube API Transcript Helpers ───────────────────────────
+
+/**
+ * Fetch transcript segments from the local backend.
+ * Returns { segments, plain_text, language } or null on failure.
+ */
+async function fetchYouTubeTranscript(videoId) {
+  try {
+    const res = await fetch(`http://localhost:8000/transcript/${videoId}`);
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (e) {
+    console.log('[LearnFlow] Transcript API unavailable:', e.message);
+    return null;
+  }
+}
+
+/**
+ * Auto-fetch a YouTube transcript and start the playback ticker.
+ * Silently skips if the same video was already loaded.
+ */
+async function autoFetchYouTubeTranscript(tab, videoId) {
+  if (state.lastAutoFetchedVideoId === videoId) return;
+  const data = await fetchYouTubeTranscript(videoId);
+  if (!data || !data.segments?.length) {
+    console.log('[LearnFlow] No transcript available via API for', videoId);
+    return;
+  }
+  state.transcriptSegments = data.segments;
+  state.lastAutoFetchedVideoId = videoId;
+  await ingestTranscript(data.plain_text, true);
+  startPlaybackTicker(tab, data.segments);
+  showToast(`📡 Transcript auto-loaded (${data.language}) — CC not required`, 'success');
+}
+
+/**
+ * Poll the video's currentTime every 800ms and push the matching
+ * transcript segment to the Live Learning Stream.
+ */
+function startPlaybackTicker(tab, segments) {
+  if (state.tickerInterval) clearInterval(state.tickerInterval);
+  let lastSegIdx = -1;
+
+  state.tickerInterval = setInterval(async () => {
+    try {
+      const res = await chrome.tabs.sendMessage(tab.id, { type: 'GET_CURRENT_TIME' });
+      const t = res?.currentTime ?? 0;
+
+      // Scan backwards to find the last segment whose start <= currentTime
+      let segIdx = -1;
+      for (let i = segments.length - 1; i >= 0; i--) {
+        if (segments[i].start <= t) { segIdx = i; break; }
+      }
+
+      if (segIdx !== -1 && segIdx !== lastSegIdx) {
+        lastSegIdx = segIdx;
+        const seg = segments[segIdx];
+        const accumulated = segments.slice(0, segIdx + 1).map(s => s.text).join(' ');
+
+        // Push to the Live Learning Stream UI
+        chrome.runtime.sendMessage({
+          type: 'LIVE_TRANSCRIPT_UPDATE',
+          text: seg.text,
+          buffer: accumulated
+        }).catch(() => {});
+
+        // Silently update RAG every 15 new segments
+        if (segIdx > 0 && segIdx % 15 === 0 && accumulated.length > 100) {
+          ingestTranscript(accumulated, true);
+        }
+      }
+    } catch (_) { /* tab may have navigated */ }
+  }, 800);
 }
 
 // ── Gemini Local Backend Call ────────────────────────────────

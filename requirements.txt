@@ -1,4 +1,6 @@
 fastapi
 uvicorn
-google-generativeai
+groq
 pydantic
+youtube-transcript-api
+python-multipart

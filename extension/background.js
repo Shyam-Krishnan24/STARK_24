@@ -40,6 +40,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .catch(err => sendResponse({ success: false, error: err.message }));
     return true;
   }
+
+  if (message.type === 'GET_TAB_STREAM_ID') {
+    chrome.tabCapture.getMediaStreamId({ targetTabId: message.tabId }, (streamId) => {
+      sendResponse({ streamId, error: chrome.runtime.lastError?.message });
+    });
+    return true;
+  }
 });
 
 async function handleTranscriptRequest(message, sender, sendResponse) {
