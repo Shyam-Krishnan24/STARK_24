@@ -1,0 +1,45 @@
+/* LearnFlow AI — Content Script Styles */
+
+#learnflow-fab {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 2147483647;
+  cursor: pointer;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  animation: lf-slide-in 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes lf-slide-in {
+  from { transform: translateY(80px) scale(0.8); opacity: 0; }
+  to { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+.lf-fab-inner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+  color: #fff;
+  padding: 12px 18px;
+  border-radius: 50px;
+  box-shadow: 0 4px 24px rgba(99, 102, 241, 0.5), 0 0 0 1px rgba(255,255,255,0.1);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  transition: all 0.2s ease;
+  border: 1px solid rgba(255,255,255,0.15);
+}
+
+.lf-fab-inner svg {
+  color: #a78bfa;
+}
+
+#learnflow-fab:hover .lf-fab-inner {
+  transform: scale(1.05);
+  box-shadow: 0 6px 32px rgba(99, 102, 241, 0.7), 0 0 0 1px rgba(255,255,255,0.2);
+}
+
+#learnflow-fab:active .lf-fab-inner {
+  transform: scale(0.97);
+}
