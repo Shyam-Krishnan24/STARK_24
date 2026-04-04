@@ -18,7 +18,7 @@ app.add_middleware(
 )
 
 # ── Config ────────────────────────────────────────────────────
-GROQ_API_KEY = "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"
+GROQ_API_KEY = "GROQ_API_KEY"
 
 # Groq SDK client
 _groq_client = Groq(api_key=GROQ_API_KEY)
