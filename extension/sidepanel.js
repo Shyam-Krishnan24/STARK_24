@@ -109,7 +109,10 @@ async function detectCurrentPage() {
         try {
           const params = new URLSearchParams(new URL(url).search);
           const videoId = params.get('v');
-          if (videoId) autoFetchYouTubeTranscript(tab, videoId);
+          if (videoId) {
+            state.videoMeta.videoId = videoId;
+            autoFetchYouTubeTranscript(tab, videoId);
+          }
         } catch (_) {}
       }
     } else {
@@ -290,6 +293,11 @@ function setupHomeView() {
     document.getElementById('btnStopAudio').disabled = true;
     document.getElementById('btnStopAudio').style.opacity = '0.5';
     showToast("✅ Stopped audio capture", "success");
+
+    // ── Persist live audio capture to DB ──
+    if (state.transcript && state.transcript.length > 50) {
+      persistTranscript(state.transcript, 'live_audio_capture');
+    }
   });
 
   // Generate button
@@ -410,6 +418,8 @@ async function toggleLiveCapture() {
     if (result?.transcript && result.transcript.length > 50) {
       await ingestTranscript(result.transcript);
       showToast('✅ Capture complete!', 'success');
+      // ── Persist live CC capture to DB ──
+      persistTranscript(result.transcript, 'live_cc_capture');
     }
   }
 }
@@ -1089,6 +1099,33 @@ async function callGemini(prompt, systemPrompt = '') {
 
   const data = await response.json();
   return data.text;
+}
+
+/**
+ * Persist the current transcript to the backend SQLite database.
+ */
+async function persistTranscript(plainText, language = 'en', segments = []) {
+  if (!state.videoMeta.videoId || !plainText || plainText.length < 50) {
+    console.log("[LearnFlow] Skipping persistence: No videoId or transcript too short");
+    return;
+  }
+  
+  try {
+    const res = await fetch("http://localhost:8000/save_transcript", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        video_id: state.videoMeta.videoId,
+        language: language,
+        segments: segments.length > 0 ? segments : [{ text: plainText, start: 0, duration: 0 }],
+        plain_text: plainText
+      })
+    });
+    const data = await res.json();
+    console.log("[LearnFlow] Transcript persisted to DB:", data);
+  } catch (e) {
+    console.error("[LearnFlow] Failed to persist transcript:", e);
+  }
 }
 
 // ── Toast ────────────────────────────────────────────────────

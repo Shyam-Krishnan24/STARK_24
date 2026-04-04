@@ -1281,6 +1281,29 @@
           </div>
         </div>
 
+        <!-- TRANSLATOR -->
+        <div class="section hidden" id="translatorSection" style="margin-bottom:14px">
+          <div class="section-label">Translate Transcript <span style="font-weight:400;font-size:9px;text-transform:none;letter-spacing:0;color:var(--text-muted)">(Groq Llama 3)</span></div>
+          <div style="display:flex; gap:8px;">
+            <select id="translateTargetLang" class="short-answer-input" style="flex:1; min-height:auto; padding:8px 10px; height:40px; cursor:pointer; background:var(--bg-card);">
+              <option value="">Choose Target Language...</option>
+              <option value="English">English</option>
+              <option value="Tamil">Tamil</option>
+              <option value="Hindi">Hindi</option>
+              <option value="Spanish">Spanish</option>
+              <option value="French">French</option>
+              <option value="German">German</option>
+              <option value="Telugu">Telugu</option>
+              <option value="Malayalam">Malayalam</option>
+            </select>
+            <button id="btnTranslateText" class="submit-btn" style="margin:0; width:auto; padding:0 16px; display:flex; align-items:center; gap:6px;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M5 12h14M12 5l7 7-7 7"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
         <!-- CONCEPTS -->
         <div class="concepts-section hidden" id="conceptsSection">
           <div class="section-label">Key Concepts <span style="font-weight:400;font-size:9px;text-transform:none;letter-spacing:0;color:var(--text-muted)">(click to select focus topics)</span></div>

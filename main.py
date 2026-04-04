@@ -4,6 +4,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from groq import Groq
 from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled
+import sqlite3
+import json
 
 app = FastAPI(title="LearnFlow AI Backend")
 
@@ -16,7 +18,7 @@ app.add_middleware(
 )
 
 # ── Config ────────────────────────────────────────────────────
-GROQ_API_KEY = "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"
+GROQ_API_KEY = "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"
 
 # Groq SDK client
 _groq_client = Groq(api_key=GROQ_API_KEY)
@@ -35,6 +37,32 @@ class ChatRequest(BaseModel):
 class TranslateRequest(BaseModel):
     text: str
     target_language: str
+
+class SaveTranscriptRequest(BaseModel):
+    video_id: str
+    language: str
+    segments: list
+    plain_text: str
+
+# ── Database ──────────────────────────────────────────────────
+DB_PATH = "transcripts.db"
+
+def init_db():
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS transcripts (
+            video_id TEXT PRIMARY KEY,
+            language TEXT,
+            segment_count INTEGER,
+            segments TEXT,
+            plain_text TEXT
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+init_db()
 
 
 # ── Helper: normalise a segment to a plain dict ───────────────
@@ -93,14 +121,31 @@ async def translate_text(request: TranslateRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/save_transcript")
+async def save_transcript(request: SaveTranscriptRequest):
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT OR REPLACE INTO transcripts (video_id, language, segment_count, segments, plain_text)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (request.video_id, request.language, len(request.segments), json.dumps(request.segments), request.plain_text))
+        conn.commit()
+        conn.close()
+        return {"status": "success", "message": f"Saved transcript for {request.video_id}"}
+    except Exception as e:
+        print(f"[LearnFlow] DB save error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/transcribe_chunk")
 async def transcribe_chunk(file: UploadFile = File(...)):
     try:
         content = await file.read()
         audio_file = ("chunk.webm", content, "audio/webm")
-        response = _groq_client.audio.transcriptions.create(
+        response = _groq_client.audio.translations.create(
             file=audio_file,
-            model="whisper-large-v3-turbo",
+            model="whisper-large-v3",
             response_format="json",
         )
         # Note: Groq returns an object with a 'text' property.
@@ -121,6 +166,25 @@ async def get_transcript(video_id: str):
     2. First translatable transcript → translated to English.
     3. Any available transcript as last resort.
     """
+    # ── Check DB First ────────────────────────────────────────
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute('SELECT language, segment_count, segments, plain_text FROM transcripts WHERE video_id = ?', (video_id,))
+        row = cursor.fetchone()
+        conn.close()
+        if row:
+            print(f"[LearnFlow] Serving cached transcript for {video_id} from DB")
+            return {
+                "video_id": video_id,
+                "language": row[0],
+                "segment_count": row[1],
+                "segments": json.loads(row[2]),
+                "plain_text": row[3],
+            }
+    except Exception as e:
+        print(f"[LearnFlow] DB read error: {e}")
+
     raw_segments = None
     language_used = "en"
 
@@ -176,6 +240,20 @@ async def get_transcript(video_id: str):
 
     segments = [_seg(s) for s in raw_segments if _seg(s)["text"]]
     plain_text = " ".join(s["text"] for s in segments)
+
+    # ── Save to DB ────────────────────────────────────────────
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT OR REPLACE INTO transcripts (video_id, language, segment_count, segments, plain_text)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (video_id, language_used, len(segments), json.dumps(segments), plain_text))
+        conn.commit()
+        conn.close()
+        print(f"[LearnFlow] Saved transcript for {video_id} to DB")
+    except Exception as e:
+        print(f"[LearnFlow] DB write error: {e}")
 
     return {
         "video_id": video_id,

@@ -306,6 +306,52 @@ function setupHomeView() {
     showToast("✅ Stopped audio capture", "success");
   });
 
+  document.getElementById('btnTranslateText').addEventListener('click', async () => {
+    const targetLang = document.getElementById('translateTargetLang').value;
+    if (!targetLang) { showToast('⚠️ Please select a language', 'info'); return; }
+    if (!state.transcript) { showToast('⚠️ No transcript loaded', 'error'); return; }
+
+    const btn = document.getElementById('btnTranslateText');
+    const oldContent = btn.innerHTML;
+    btn.innerHTML = '⏳';
+    btn.disabled = true;
+
+    showToast(`🔄 Translating to ${targetLang}...`, 'info');
+
+    try {
+      const res = await fetch("http://localhost:8000/translate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: state.transcript, target_language: targetLang })
+      });
+      if (!res.ok) throw new Error("Translation HTTP error");
+      const data = await res.json();
+      if (data.text) {
+        showToast(`✅ Translated to ${targetLang}!`, 'success');
+
+        // Show the user the translated text visually!
+        const streamEl = document.getElementById('liveStream');
+        if (streamEl) {
+          streamEl.innerHTML = '';
+          const span = document.createElement('span');
+          span.className = 'stream-item';
+          span.textContent = data.text;
+          streamEl.appendChild(span);
+          streamEl.scrollTop = 0;
+          document.getElementById('liveStreamSection').classList.remove('hidden');
+        }
+
+        await ingestTranscript(data.text);
+      }
+    } catch (e) {
+      console.error(e);
+      showToast(`❌ Translation failed: ${e.message}`, 'error');
+    }
+
+    btn.innerHTML = oldContent;
+    btn.disabled = false;
+  });
+
   // Generate button
   document.getElementById('generateBtn').addEventListener('click', startQuiz);
 }
@@ -487,8 +533,10 @@ async function ingestTranscript(text, silent = false) {
   const conceptsSection = document.getElementById('conceptsSection');
   const conceptTags = document.getElementById('conceptTags');
   const hintEl = document.getElementById('selectedConceptsHint');
+  const translatorEl = document.getElementById('translatorSection');
 
   statusEl.classList.remove('hidden');
+  if (translatorEl) translatorEl.classList.remove('hidden');
   metaEl.textContent = `${text.split(' ').length.toLocaleString()} words · ${result.concepts.length} concepts · ${result.chunkCount} chunks`;
 
   // Show concept tags — each is clickable to narrow the quiz focus
