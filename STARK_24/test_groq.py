@@ -1,7 +1,7 @@
 from groq import Groq
 import os
 
-client = Groq(api_key="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")
+client = Groq(api_key="GROQ_API_KEY")
 try:
     response = client.models.list()
     print("Success: models listed successfully!")
